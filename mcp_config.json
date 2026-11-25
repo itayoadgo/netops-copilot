@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "nettools": {
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/scripts/netops-mcp-server.mjs"
+      ]
+    }
+  }
+}

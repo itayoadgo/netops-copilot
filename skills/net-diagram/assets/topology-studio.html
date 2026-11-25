@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetOps Topology Studio</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .canvas-grid {
+      background-image: radial-gradient(color-mix(in srgb, var(--muted-foreground) 24%, transparent) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    .node-card {
+      cursor: grab;
+      user-select: none;
+    }
+    .node-card:active {
+      cursor: grabbing;
+    }
+    .link-hit {
+      cursor: pointer;
+    }
+    .link-hit:hover {
+      stroke-opacity: 0.25;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased m-0 p-4">
+  <div class="max-w-7xl mx-auto space-y-4">
+    <!-- Top Header & Presets -->
+    <header class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center font-bold text-lg">
+          🛡️
+        </div>
+        <div>
+          <h1 class="text-base font-bold leading-tight">NetOps Topology Studio</h1>
+          <p class="text-xs text-[var(--muted-foreground)]">בניית טופולוגיית רשת אינטראקטיבית, זיהוי סיכוני אבטחה בזמן אמת וייצוא ל-Mermaid / SVG</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-[var(--muted-foreground)]">תבניות מוכנות:</span>
+        <button onclick="loadPreset('enterprise')" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] transition">
+          🏢 Enterprise DMZ
+        </button>
+        <button onclick="loadPreset('risky')" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--error)] transition">
+          ⚠️ רשת עם חולשות
+        </button>
+        <button onclick="loadPreset('vpn')" class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)] transition">
+          ☁️ Hub &amp; Spoke VPN
+        </button>
+        <button onclick="clearCanvas()" class="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--error)] hover:border-[var(--error)] transition">
+          🗑️ נקה הכל
+        </button>
+      </div>
+    </header>
+
+    <!-- Device Palette & Mode Bar -->
+    <section class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="font-semibold text-[var(--muted-foreground)] ml-1">הוסף רכיב:</span>
+        <button onclick="addNode('internet')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🌐 Internet</button>
+        <button onclick="addNode('firewall')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🛡️ Firewall</button>
+        <button onclick="addNode('router')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🔀 Router / SW</button>
+        <button onclick="addNode('server')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">💻 Server</button>
+        <button onclick="addNode('database')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🗄️ Database</button>
+        <button onclick="addNode('users')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🖥️ Users / LAN</button>
+        <button onclick="addNode('bastion')" class="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]">🔐 Bastion / MGMT</button>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs">
+        <button id="connectModeBtn" onclick="toggleConnectMode()" class="px-3 py-1.5 rounded-lg border border-[var(--primary)] text-[var(--primary)] font-semibold transition">
+          🔗 מצב חיבור: כבוי
+        </button>
+        <button onclick="downloadSvg()" class="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-90 transition">
+          ⬇️ הורד SVG
+        </button>
+      </div>
+    </section>
+
+    <!-- Main Workspace: Canvas + Inspector -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <!-- Interactive SVG Canvas -->
+      <div class="lg:col-span-8 bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+        <div class="px-4 py-2 border-b border-[var(--border)] flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+          <span id="canvasHint">גרור רכיבים למיקום הרצוי • לחץ על רכיב או קו כדי לערוך</span>
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-[var(--success)]"></span> תקין</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-[var(--error)]"></span> סיכון אבטחה</span>
+          </div>
+        </div>
+        <div class="relative w-full h-[460px] canvas-grid overflow-hidden">
+          <svg id="topologySvg" class="w-full h-full" viewBox="0 0 820 460" dir="ltr">
+            <defs>
+              <marker id="arrow-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--chart-1)"></path>
+              </marker>
+              <marker id="arrow-risk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--error)"></path>
+              </marker>
+              <marker id="arrow-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--primary)"></path>
+              </marker>
+            </defs>
+            <g id="linksLayer"></g>
+            <g id="nodesLayer"></g>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Right Sidebar: Inspector + Live Security Audit -->
+      <div class="lg:col-span-4 space-y-4">
+        <!-- Selection Inspector -->
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+          <h2 class="text-sm font-bold flex items-center justify-between">
+            <span>⚙️ עריכת פריט נבחר</span>
+            <span id="selectionBadge" class="text-xs font-normal text-[var(--muted-foreground)]">לא נבחר</span>
+          </h2>
+
+          <div id="emptyInspector" class="text-xs text-[var(--muted-foreground)] py-3">
+            לחץ על רכיב או על קו חיבור בקנבס כדי לערוך שם, VLAN/Zone, כתובת CIDR, פורטים או למחוק.
+          </div>
+
+          <!-- Node Editor -->
+          <div id="nodeEditor" class="hidden space-y-2.5 text-xs">
+            <div>
+              <label class="block text-[var(--muted-foreground)] mb-1">שם הרכיב</label>
+              <input id="nodeLabelInput" type="text" oninput="updateSelectedNode()" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[var(--muted-foreground)] mb-1">Zone / VLAN</label>
+                <select id="nodeZoneInput" onchange="updateSelectedNode()" class="w-full px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]">
+                  <option value="WAN">WAN / Internet</option>
+                  <option value="PERIMETER">Perimeter / FW</option>
+                  <option value="DMZ">DMZ (VLAN 10)</option>
+                  <option value="LAN">Corp LAN (VLAN 20)</option>
+                  <option value="SERVERS">Servers (VLAN 30)</option>
+                  <option value="MGMT">MGMT (VLAN 99)</option>
+                  <option value="CLOUD">Cloud VPC</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[var(--muted-foreground)] mb-1">IP / CIDR</label>
+                <input id="nodeCidrInput" type="text" dir="ltr" placeholder="10.10.20.0/24" oninput="updateSelectedNode()" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] font-mono" />
+              </div>
+            </div>
+            <button onclick="deleteSelected()" class="w-full mt-1 py-1.5 rounded-lg border border-[var(--error)] text-[var(--error)] hover:opacity-80 font-semibold">
+              🗑️ מחק רכיב
+            </button>
+          </div>
+
+          <!-- Link Editor -->
+          <div id="linkEditor" class="hidden space-y-2.5 text-xs">
+            <div>
+              <label class="block text-[var(--muted-foreground)] mb-1">תווית / פרוטוקול ופורט</label>
+              <input id="linkLabelInput" type="text" dir="ltr" placeholder="HTTPS 443" oninput="updateSelectedLink()" class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] font-mono" />
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="quickLinkLabel('HTTPS 443')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">HTTPS 443</button>
+              <button onclick="quickLinkLabel('SSH 22')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">SSH 22</button>
+              <button onclick="quickLinkLabel('SQL 1433')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">SQL 1433</button>
+              <button onclick="quickLinkLabel('IPsec VPN')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">IPsec VPN</button>
+              <button onclick="quickLinkLabel('RDP 3389')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">RDP 3389</button>
+              <button onclick="quickLinkLabel('Telnet 23')" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] font-mono">Telnet 23</button>
+            </div>
+            <button onclick="deleteSelected()" class="w-full mt-1 py-1.5 rounded-lg border border-[var(--error)] text-[var(--error)] hover:opacity-80 font-semibold">
+              🗑️ מחק חיבור
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Security Findings -->
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold">🔍 בדיקת אבטחה אוטומטית</h2>
+            <span id="securityStatusBadge" class="text-xs px-2 py-0.5 rounded-full font-semibold"></span>
+          </div>
+          <ul id="findingsList" class="space-y-2 text-xs max-h-[210px] overflow-y-auto"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Export Panel: Live Mermaid Code -->
+    <section class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-2">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold">📋 קוד Mermaid מסונכרן (להדבקה בתיעוד / GitHub / Antigravity)</h2>
+        <button id="copyMermaidBtn" onclick="copyMermaid()" class="text-xs px-3 py-1.5 rounded-lg bg-[var(--secondary)] text-[var(--secondary-foreground)] font-semibold hover:opacity-90 transition">
+          העתק קוד Mermaid
+        </button>
+      </div>
+      <pre id="mermaidOutput" dir="ltr" class="text-xs font-mono p-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--code-foreground)] overflow-x-auto max-h-48"></pre>
+    </section>
+  </div>
+
+  <script>
+    const NODE_TYPES = {
+      internet: { icon: "🌐", defaultLabel: "Internet", defaultZone: "WAN", defaultCidr: "0.0.0.0/0" },
+      firewall: { icon: "🛡️", defaultLabel: "Core Firewall", defaultZone: "PERIMETER", defaultCidr: "10.10.0.1/24" },
+      router:   { icon: "🔀", defaultLabel: "Core Switch", defaultZone: "LAN", defaultCidr: "10.10.1.1/24" },
+      server:   { icon: "💻", defaultLabel: "Web / App Server", defaultZone: "DMZ", defaultCidr: "10.10.10.10/24" },
+      database: { icon: "🗄️", defaultLabel: "SQL Database", defaultZone: "SERVERS", defaultCidr: "10.10.30.20/24" },
+      users:    { icon: "🖥️", defaultLabel: "Corp Workstations", defaultZone: "LAN", defaultCidr: "10.10.20.0/24" },
+      bastion:  { icon: "🔐", defaultLabel: "MGMT Bastion", defaultZone: "MGMT", defaultCidr: "10.10.99.10/24" },
+    };
+
+    const ZONE_COLORS = {
+      WAN: "var(--chart-4)",
+      PERIMETER: "var(--chart-1)",
+      DMZ: "var(--chart-3)",
+      LAN: "var(--chart-2)",
+      SERVERS: "var(--chart-5)",
+      MGMT: "var(--chart-6)",
+      CLOUD: "var(--primary)",
+    };
+
+    let state = {
+      nodes: [],
+      links: [],
+      selected: null, // { type: 'node' | 'link', id }
+      connectMode: false,
+      connectFromId: null,
+      nextId: 1,
+    };
+
+    let dragState = null;
+
+    function uid(prefix) {
+      return `${prefix}_${state.nextId++}`;
+    }
+
+    function loadPreset(name) {
+      state.selected = null;
+      state.connectMode = false;
+      state.connectFromId = null;
+      updateConnectBtn();
+
+      if (name === "enterprise") {
+        state.nodes = [
+          { id: "n1", type: "internet", label: "Internet", zone: "WAN", cidr: "0.0.0.0/0", x: 95, y: 220 },
+          { id: "n2", type: "firewall", label: "FortiGate FW", zone: "PERIMETER", cidr: "10.10.0.1/24", x: 265, y: 220 },
+          { id: "n3", type: "server", label: "Web / WAF", zone: "DMZ", cidr: "10.10.10.10/24", x: 475, y: 95 },
+          { id: "n4", type: "users", label: "Corp LAN", zone: "LAN", cidr: "10.10.20.0/24", x: 475, y: 220 },
+          { id: "n5", type: "database", label: "SQL Server", zone: "SERVERS", cidr: "10.10.30.20/24", x: 695, y: 155 },
+          { id: "n6", type: "bastion", label: "MGMT Bastion", zone: "MGMT", cidr: "10.10.99.10/24", x: 475, y: 355 },
+        ];
+        state.links = [
+          { id: "l1", from: "n1", to: "n2", label: "HTTPS 443" },
+          { id: "l2", from: "n2", to: "n3", label: "HTTPS 443" },
+          { id: "l3", from: "n3", to: "n5", label: "SQL 1433 (TLS)" },
+          { id: "l4", from: "n4", to: "n2", label: "HTTPS 443" },
+          { id: "l5", from: "n6", to: "n2", label: "SSH 22 / HTTPS" },
+        ];
+        state.nextId = 20;
+      } else if (name === "risky") {
+        state.nodes = [
+          { id: "n1", type: "internet", label: "Internet", zone: "WAN", cidr: "0.0.0.0/0", x: 95, y: 220 },
+          { id: "n2", type: "firewall", label: "Edge Firewall", zone: "PERIMETER", cidr: "10.0.0.1/24", x: 270, y: 220 },
+          { id: "n3", type: "server", label: "Public Web", zone: "DMZ", cidr: "10.0.10.15/24", x: 485, y: 105 },
+          { id: "n4", type: "database", label: "Prod DB", zone: "SERVERS", cidr: "10.0.30.50/24", x: 690, y: 220 },
+          { id: "n5", type: "bastion", label: "Admin Jump", zone: "MGMT", cidr: "10.0.99.5/24", x: 485, y: 345 },
+        ];
+        state.links = [
+          { id: "l1", from: "n1", to: "n2", label: "RDP 3389" },
+          { id: "l2", from: "n1", to: "n4", label: "SQL 1433" },
+          { id: "l3", from: "n3", to: "n5", label: "Telnet 23" },
+          { id: "l4", from: "n2", to: "n3", label: "HTTP 80" },
+        ];
+        state.nextId = 20;
+      } else if (name === "vpn") {
+        state.nodes = [
+          { id: "n1", type: "firewall", label: "HQ Firewall", zone: "PERIMETER", cidr: "10.0.0.0/16", x: 115, y: 145 },
+          { id: "n2", type: "firewall", label: "Branch FW", zone: "PERIMETER", cidr: "10.1.0.0/16", x: 115, y: 315 },
+          { id: "n3", type: "router", label: "Cloud Transit Hub", zone: "CLOUD", cidr: "10.100.0.0/16", x: 390, y: 230 },
+          { id: "n4", type: "server", label: "Prod Spoke VPC", zone: "SERVERS", cidr: "10.101.0.0/16", x: 675, y: 145 },
+          { id: "n5", type: "server", label: "Dev Spoke VPC", zone: "CLOUD", cidr: "10.102.0.0/16", x: 675, y: 315 },
+        ];
+        state.links = [
+          { id: "l1", from: "n1", to: "n3", label: "IPsec IKEv2" },
+          { id: "l2", from: "n2", to: "n3", label: "IPsec IKEv2" },
+          { id: "l3", from: "n3", to: "n4", label: "TLS 443 / Peering" },
+          { id: "l4", from: "n3", to: "n5", label: "HTTPS 443" },
+        ];
+        state.nextId = 20;
+      }
+      renderAll();
+    }
+
+    function clearCanvas() {
+      state.nodes = [];
+      state.links = [];
+      state.selected = null;
+      state.connectFromId = null;
+      renderAll();
+    }
+
+    function addNode(type) {
+      const meta = NODE_TYPES[type] || NODE_TYPES.server;
+      const offset = (state.nodes.length % 5) * 32;
+      const node = {
+        id: uid("n"),
+        type,
+        label: meta.defaultLabel,
+        zone: meta.defaultZone,
+        cidr: meta.defaultCidr,
+        x: 160 + offset * 2.2,
+        y: 120 + offset * 1.4,
+      };
+      state.nodes.push(node);
+      state.selected = { type: "node", id: node.id };
+      renderAll();
+    }
+
+    function toggleConnectMode() {
+      state.connectMode = !state.connectMode;
+      state.connectFromId = null;
+      updateConnectBtn();
+      renderAll();
+    }
+
+    function updateConnectBtn() {
+      const btn = document.getElementById("connectModeBtn");
+      const hint = document.getElementById("canvasHint");
+      if (state.connectMode) {
+        btn.textContent = "🔗 מצב חיבור: פעיל (בחר מקור → יעד)";
+        btn.classList.add("bg-[var(--primary)]", "text-[var(--primary-foreground)]");
+        btn.classList.remove("text-[var(--primary)]");
+        hint.textContent = state.connectFromId
+          ? "עכשיו לחץ על רכיב היעד כדי ליצור חיבור"
+          : "לחץ על רכיב המקור ואז על רכיב היעד כדי לחבר ביניהם";
+      } else {
+        btn.textContent = "🔗 מצב חיבור: כבוי";
+        btn.classList.remove("bg-[var(--primary)]", "text-[var(--primary-foreground)]");
+        btn.classList.add("text-[var(--primary)]");
+        hint.textContent = "גרור רכיבים למיקום הרצוי • לחץ על רכיב או קו כדי לערוך";
+      }
+    }
+
+    function evaluateSecurity() {
+      const findings = [];
+      const riskyLinkIds = new Set();
+      const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
+
+      for (const link of state.links) {
+        const src = nodeMap.get(link.from);
+        const dst = nodeMap.get(link.to);
+        if (!src || !dst) continue;
+        const lbl = (link.label || "").toLowerCase();
+
+        // 1. Cleartext management protocols
+        if (/\b(telnet|23|ftp|21|vnc|5900)\b/.test(lbl)) {
+          riskyLinkIds.add(link.id);
+          findings.push({
+            severity: "CRITICAL",
+            text: `פרוטוקול לא מוצפן (${link.label}) בין ${src.label} ל-${dst.label}. מומלץ להחליף ב-SSH/SFTP/TLS.`,
+          });
+        }
+
+        // 2. Internet directly to DB or MGMT
+        if (src.zone === "WAN" && (dst.type === "database" || dst.zone === "MGMT")) {
+          riskyLinkIds.add(link.id);
+          findings.push({
+            severity: "CRITICAL",
+            text: `גישה ישירה מהאינטרנט (${src.label}) אל ${dst.label} (${dst.zone}) בלי Firewall/Bastion באמצע!`,
+          });
+        }
+
+        // 3. RDP / SMB / DB ports exposed from Internet
+        if (src.zone === "WAN" && /\b(3389|rdp|445|smb|1433|3306|5432|6379|27017)\b/.test(lbl)) {
+          riskyLinkIds.add(link.id);
+          findings.push({
+            severity: "CRITICAL",
+            text: `פורט רגיש (${link.label}) חשוף ישירות מ-${src.label} אל ${dst.label}. יש להגביל ל-VPN/Bastion.`,
+          });
+        }
+
+        // 4. DMZ talking directly to MGMT
+        if (src.zone === "DMZ" && dst.zone === "MGMT") {
+          riskyLinkIds.add(link.id);
+          findings.push({
+            severity: "HIGH",
+            text: `תעבורה מ-DMZ (${src.label}) אל רשת ניהול MGMT (${dst.label}) — הפרת סגמנטציה חמורה.`,
+          });
+        }
+
+        // 5. Plain HTTP from WAN
+        if (src.zone === "WAN" && /\bhttp\b/.test(lbl) && !/https/.test(lbl)) {
+          riskyLinkIds.add(link.id);
+          findings.push({
+            severity: "MEDIUM",
+            text: `תעבורת HTTP לא מוצפנת מ-${src.label} אל ${dst.label} — מומלץ לאכוף HTTPS 443.`,
+          });
+        }
+      }
+
+      // Check duplicate CIDRs (ignoring 0.0.0.0/0)
+      const cidrOwners = new Map();
+      for (const n of state.nodes) {
+        const c = (n.cidr || "").trim();
+        if (!c || c === "0.0.0.0/0") continue;
+        if (cidrOwners.has(c)) {
+          findings.push({
+            severity: "MEDIUM",
+            text: `חפיפת כתובת/CIDR זהה (${c}) בין ${cidrOwners.get(c)} ל-${n.label}.`,
+          });
+        } else {
+          cidrOwners.set(c, n.label);
+        }
+      }
+
+      return { findings, riskyLinkIds };
+    }
+
+    function renderCanvas(riskyLinkIds) {
+      const linksLayer = document.getElementById("linksLayer");
+      const nodesLayer = document.getElementById("nodesLayer");
+      const nodeMap = new Map(state.nodes.map((n) => [n.id, n]));
+
+      // Render links
+      linksLayer.innerHTML = state.links
+        .map((link) => {
+          const src = nodeMap.get(link.from);
+          const dst = nodeMap.get(link.to);
+          if (!src || !dst) return "";
+
+          const isSelected = state.selected?.type === "link" && state.selected.id === link.id;
+          const isRisk = riskyLinkIds.has(link.id);
+          const stroke = isSelected ? "var(--primary)" : isRisk ? "var(--error)" : "var(--chart-1)";
+          const marker = isSelected ? "url(#arrow-selected)" : isRisk ? "url(#arrow-risk)" : "url(#arrow-ok)";
+          const dash = isRisk ? 'stroke-dasharray="7 5"' : "";
+
+          // Shorten line slightly so arrowhead stops near node edge
+          const dx = dst.x - src.x;
+          const dy = dst.y - src.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const padStart = 58;
+          const padEnd = 62;
+          const x1 = src.x + (dx / dist) * padStart;
+          const y1 = src.y + (dy / dist) * padStart;
+          const x2 = dst.x - (dx / dist) * padEnd;
+          const y2 = dst.y - (dy / dist) * padEnd;
+
+          const mx = (x1 + x2) / 2;
+          const my = (y1 + y2) / 2;
+          const pillW = Math.max(66, (link.label || "").length * 7.2 + 18);
+
+          return `
+            <g onclick="selectItem('link', '${link.id}', event)">
+              <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="14" stroke-opacity="0" class="link-hit" />
+              <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${isSelected ? 3.2 : 2.2}" ${dash} marker-end="${marker}" />
+              <rect x="${mx - pillW / 2}" y="${my - 11}" width="${pillW}" height="22" rx="11" fill="var(--card)" stroke="${stroke}" stroke-width="1.2" />
+              <text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" font-family="ui-monospace, monospace" fill="${isRisk ? "var(--error)" : "var(--foreground)"}">${escapeXml(link.label || "Allow")}</text>
+            </g>
+          `;
+        })
+        .join("");
+
+      // Render nodes
+      nodesLayer.innerHTML = state.nodes
+        .map((node) => {
+          const meta = NODE_TYPES[node.type] || NODE_TYPES.server;
+          const isSelected = state.selected?.type === "node" && state.selected.id === node.id;
+          const isConnectStart = state.connectMode && state.connectFromId === node.id;
+          const zoneColor = ZONE_COLORS[node.zone] || "var(--primary)";
+          const borderColor = isConnectStart
+            ? "var(--warning)"
+            : isSelected
+            ? "var(--primary)"
+            : "var(--border)";
+          const strokeWidth = isSelected || isConnectStart ? 2.6 : 1.4;
+
+          return `
+            <g class="node-card" transform="translate(${node.x - 68}, ${node.y - 34})"
+               onmousedown="startDrag('${node.id}', event)"
+               onclick="handleNodeClick('${node.id}', event)">
+              <rect width="136" height="68" rx="12" fill="var(--card)" stroke="${borderColor}" stroke-width="${strokeWidth}" />
+              <rect x="0" y="0" width="136" height="6" rx="3" fill="${zoneColor}" />
+              <text x="12" y="29" font-size="16">${meta.icon}</text>
+              <text x="34" y="28" font-size="12" font-weight="700" fill="var(--foreground)">${escapeXml(truncate(node.label, 14))}</text>
+              <text x="12" y="47" font-size="10.5" font-family="ui-monospace, monospace" fill="var(--muted-foreground)">${escapeXml(truncate(node.cidr || "", 18))}</text>
+              <rect x="86" y="49" width="42" height="14" rx="4" fill="var(--background)" stroke="${zoneColor}" stroke-width="0.9" />
+              <text x="107" y="59" text-anchor="middle" font-size="9" font-weight="600" fill="var(--foreground)">${escapeXml(node.zone)}</text>
+            </g>
+          `;
+        })
+        .join("");
+    }
+
+    function renderInspector() {
+      const empty = document.getElementById("emptyInspector");
+      const nodeEd = document.getElementById("nodeEditor");
+      const linkEd = document.getElementById("linkEditor");
+      const badge = document.getElementById("selectionBadge");
+
+      empty.classList.add("hidden");
+      nodeEd.classList.add("hidden");
+      linkEd.classList.add("hidden");
+
+      if (!state.selected) {
+        empty.classList.remove("hidden");
+        badge.textContent = "לא נבחר";
+        return;
+      }
+
+      if (state.selected.type === "node") {
+        const node = state.nodes.find((n) => n.id === state.selected.id);
+        if (!node) return;
+        badge.textContent = `רכיב (${node.zone})`;
+        nodeEd.classList.remove("hidden");
+        document.getElementById("nodeLabelInput").value = node.label;
+        document.getElementById("nodeZoneInput").value = node.zone;
+        document.getElementById("nodeCidrInput").value = node.cidr;
+      } else {
+        const link = state.links.find((l) => l.id === state.selected.id);
+        if (!link) return;
+        badge.textContent = "חיבור רשת";
+        linkEd.classList.remove("hidden");
+        document.getElementById("linkLabelInput").value = link.label;
+      }
+    }
+
+    function renderSecurityPanel(findings) {
+      const list = document.getElementById("findingsList");
+      const badge = document.getElementById("securityStatusBadge");
+
+      if (findings.length === 0) {
+        badge.textContent = "✔ תקין";
+        badge.style.background = "color-mix(in srgb, var(--success) 18%, transparent)";
+        badge.style.color = "var(--success)";
+        list.innerHTML = `<li class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[var(--muted-foreground)]">לא נמצאו סיכוני אבטחה או חפיפות CIDR בטופולוגיה הנוכחית.</li>`;
+        return;
+      }
+
+      badge.textContent = `${findings.length} ממצאים`;
+      badge.style.background = "color-mix(in srgb, var(--error) 18%, transparent)";
+      badge.style.color = "var(--error)";
+
+      list.innerHTML = findings
+        .map((f) => {
+          const color = f.severity === "CRITICAL" ? "var(--error)" : f.severity === "HIGH" ? "var(--warning)" : "var(--chart-3)";
+          return `
+            <li class="p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+              <div class="font-bold mb-0.5" style="color: ${color}">${f.severity}</div>
+              <div class="text-[var(--foreground)]">${escapeHtml(f.text)}</div>
+            </li>
+          `;
+        })
+        .join("");
+    }
+
+    function generateMermaid(riskyLinkIds) {
+      const lines = ["flowchart LR"];
+      const zones = new Map();
+      for (const n of state.nodes) {
+        if (!zones.has(n.zone)) zones.set(n.zone, []);
+        zones.get(n.zone).push(n);
+      }
+
+      for (const [zone, nodes] of zones.entries()) {
+        if (zone === "WAN" || zone === "PERIMETER") {
+          for (const n of nodes) {
+            const label = n.cidr && n.cidr !== "0.0.0.0/0" ? `${n.label} (${n.cidr})` : n.label;
+            const shape = n.type === "internet" ? `(["${label}"])` : `["${label}"]`;
+            lines.push(`    ${n.id}${shape}`);
+          }
+        } else {
+          lines.push(`    subgraph ${zone}["${zone}"]`);
+          for (const n of nodes) {
+            const label = n.cidr ? `${n.label} (${n.cidr})` : n.label;
+            const shape = n.type === "database" ? `[("${label}")]` : `["${label}"]`;
+            lines.push(`        ${n.id}${shape}`);
+          }
+          lines.push("    end");
+        }
+      }
+
+      for (const l of state.links) {
+        const isRisk = riskyLinkIds.has(l.id);
+        const arrow = isRisk ? "-.->" : "-->";
+        const tag = isRisk ? `RISK: ${l.label}` : l.label;
+        lines.push(`    ${l.from} ${arrow}|"${tag}"| ${l.to}`);
+      }
+      return lines.join("\n");
+    }
+
+    function renderAll() {
+      const { findings, riskyLinkIds } = evaluateSecurity();
+      renderCanvas(riskyLinkIds);
+      renderInspector();
+      renderSecurityPanel(findings);
+      document.getElementById("mermaidOutput").textContent = generateMermaid(riskyLinkIds);
+    }
+
+    // Interactions
+    function selectItem(type, id, ev) {
+      if (ev) ev.stopPropagation();
+      state.selected = { type, id };
+      renderAll();
+    }
+
+    function handleNodeClick(id, ev) {
+      ev.stopPropagation();
+      if (state.connectMode) {
+        if (!state.connectFromId) {
+          state.connectFromId = id;
+          updateConnectBtn();
+          renderAll();
+        } else if (state.connectFromId !== id) {
+          const newLink = { id: uid("l"), from: state.connectFromId, to: id, label: "HTTPS 443" };
+          state.links.push(newLink);
+          state.connectFromId = null;
+          state.selected = { type: "link", id: newLink.id };
+          updateConnectBtn();
+          renderAll();
+        }
+        return;
+      }
+      selectItem("node", id);
+    }
+
+    function startDrag(id, ev) {
+      if (state.connectMode) return;
+      ev.stopPropagation();
+      const svg = document.getElementById("topologySvg");
+      const pt = clientToSvg(svg, ev.clientX, ev.clientY);
+      const node = state.nodes.find((n) => n.id === id);
+      if (!node) return;
+      dragState = { id, offsetX: pt.x - node.x, offsetY: pt.y - node.y };
+    }
+
+    function clientToSvg(svg, clientX, clientY) {
+      const rect = svg.getBoundingClientRect();
+      const vb = svg.viewBox.baseVal;
+      return {
+        x: ((clientX - rect.left) / rect.width) * vb.width,
+        y: ((clientY - rect.top) / rect.height) * vb.height,
+      };
+    }
+
+    window.addEventListener("mousemove", (ev) => {
+      if (!dragState) return;
+      const svg = document.getElementById("topologySvg");
+      const pt = clientToSvg(svg, ev.clientX, ev.clientY);
+      const node = state.nodes.find((n) => n.id === dragState.id);
+      if (!node) return;
+      node.x = Math.max(72, Math.min(748, Math.round(pt.x - dragState.offsetX)));
+      node.y = Math.max(38, Math.min(422, Math.round(pt.y - dragState.offsetY)));
+      const { riskyLinkIds } = evaluateSecurity();
+      renderCanvas(riskyLinkIds);
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (dragState) {
+        dragState = null;
+      }
+    });
+
+    document.getElementById("topologySvg").addEventListener("click", () => {
+      if (!state.connectMode) {
+        state.selected = null;
+        renderAll();
+      }
+    });
+
+    function updateSelectedNode() {
+      if (state.selected?.type !== "node") return;
+      const node = state.nodes.find((n) => n.id === state.selected.id);
+      if (!node) return;
+      node.label = document.getElementById("nodeLabelInput").value;
+      node.zone = document.getElementById("nodeZoneInput").value;
+      node.cidr = document.getElementById("nodeCidrInput").value;
+      renderAll();
+    }
+
+    function updateSelectedLink() {
+      if (state.selected?.type !== "link") return;
+      const link = state.links.find((l) => l.id === state.selected.id);
+      if (!link) return;
+      link.label = document.getElementById("linkLabelInput").value;
+      renderAll();
+    }
+
+    function quickLinkLabel(val) {
+      document.getElementById("linkLabelInput").value = val;
+      updateSelectedLink();
+    }
+
+    function deleteSelected() {
+      if (!state.selected) return;
+      if (state.selected.type === "node") {
+        const id = state.selected.id;
+        state.nodes = state.nodes.filter((n) => n.id !== id);
+        state.links = state.links.filter((l) => l.from !== id && l.to !== id);
+      } else {
+        state.links = state.links.filter((l) => l.id !== state.selected.id);
+      }
+      state.selected = null;
+      renderAll();
+    }
+
+    function copyMermaid() {
+      const code = document.getElementById("mermaidOutput").textContent;
+      navigator.clipboard?.writeText(code);
+      const btn = document.getElementById("copyMermaidBtn");
+      btn.textContent = "✔ הועתק!";
+      setTimeout(() => (btn.textContent = "העתק קוד Mermaid"), 1600);
+    }
+
+    function downloadSvg() {
+      const svg = document.getElementById("topologySvg");
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const blob = new Blob([clone.outerHTML], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "netops-topology.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function truncate(str, max) {
+      return str.length > max ? str.slice(0, max - 1) + "…" : str;
+    }
+
+    function escapeXml(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeHtml(s) {
+      return escapeXml(s);
+    }
+
+    // Boot with Enterprise DMZ preset
+    loadPreset("enterprise");
+  </script>
+</body>
+</html>

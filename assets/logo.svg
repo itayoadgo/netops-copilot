@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="NetOps Copilot Logo">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <!-- ~10% transparent padding around a crisp 1:1 badge legible on both Light and Dark themes -->
+  <rect x="26" y="26" width="204" height="204" rx="44" fill="#0F172A" stroke="#38BDF8" stroke-width="4"/>
+  <!-- Shield silhouette -->
+  <path d="M128 54 L186 76 V126 C186 164 161 191 128 204 C95 191 70 164 70 126 V76 Z" fill="url(#shieldGrad)" fill-opacity="0.22" stroke="url(#accentGrad)" stroke-width="5" stroke-linejoin="round"/>
+  <!-- Network topology nodes & links inside shield -->
+  <g stroke="#E0F2FE" stroke-width="4.5" stroke-linecap="round">
+    <line x1="128" y1="88" x2="96" y2="128"/>
+    <line x1="128" y1="88" x2="160" y2="128"/>
+    <line x1="96" y1="128" x2="160" y2="128"/>
+    <line x1="96" y1="128" x2="128" y2="166"/>
+    <line x1="160" y1="128" x2="128" y2="166"/>
+  </g>
+  <circle cx="128" cy="88" r="10" fill="#38BDF8" stroke="#0F172A" stroke-width="3"/>
+  <circle cx="96" cy="128" r="9" fill="#22D3EE" stroke="#0F172A" stroke-width="3"/>
+  <circle cx="160" cy="128" r="9" fill="#22D3EE" stroke="#0F172A" stroke-width="3"/>
+  <circle cx="128" cy="166" r="10" fill="#34D399" stroke="#0F172A" stroke-width="3"/>
+</svg>

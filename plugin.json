@@ -1,0 +1,28 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "netops-copilot",
+  "displayName": "NetOps Copilot",
+  "version": "1.0.0",
+  "description": "Network topology diagrams, firewall rule auditing, CIDR/VLSM subnet planning, and IOC defanging with offline MCP tools and security guardrails.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Draw a network topology diagram for DMZ, Corporate LAN, and Servers VLANs behind a firewall",
+    "Audit my firewall rules for Any-Any exposures, risky ports, and shadowed rules",
+    "Plan VLSM subnets for 10.20.0.0/22 across 4 departments and check for CIDR overlaps"
+  ],
+  "author": {
+    "name": "NetOps Copilot",
+    "url": "https://github.com/netops-copilot"
+  },
+  "license": "MIT",
+  "keywords": [
+    "networking",
+    "infosec",
+    "firewall",
+    "subnet",
+    "cidr",
+    "topology",
+    "mermaid",
+    "soc"
+  ]
+}
